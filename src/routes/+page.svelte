@@ -1,148 +1,397 @@
 <script lang="ts">
-	import Tab, { Icon, Label } from '@smui/tab';
+	// @ts-ignore
+	import Flex from 'svelte-flex';
+	import Paper, { Title } from '@smui/paper';
+	import Select, { Option } from '@smui/select';
+	import Tab, { Label } from '@smui/tab';
 	import TabBar from '@smui/tab-bar';
-	import DataTable, { Head, Body, Row, Cell, SortValue, Pagination } from '@smui/data-table';
-    import Select, { Option } from '@smui/select';
+	import DataTable, { Head, Body, Row, Cell as TableCell, Pagination } from '@smui/data-table';
+	import LayoutGrid, { Cell } from '@smui/layout-grid';
 	import IconButton from '@smui/icon-button';
-	//import type { User } from '../types/User';
-	import type { TabEntry } from '../types/TabEntry';
-    import type { Log } from '../types/Log';
 	import { onMount } from 'svelte';
-    import { loggedIn } from '../stores/state';
-    import { user } from '../stores/state';
-    import { client } from '../stores/state';
-    import PocketBase from 'pocketbase';
+	import { user, pb, loggers } from '../stores/state';
+	import type PocketBase from 'pocketbase';
+	import type { User } from '../types/User';
+	import type { Client } from '../types/Client';
+	import type { Logger } from '../types/Logger';
+	import Button from '@smui/button';
+	import { SortDirection } from '../types/SortDirection';
+	import Textfield from '@smui/textfield';
+	import HelperText from '@smui/textfield/helper-text';
+	import Switch from '@smui/switch';
+	import FormField from '@smui/form-field';
+	import Tooltip, { Wrapper } from '@smui/tooltip';
 
-    const LOG_COLLECTION = "log"
+	let labelWidth = 2;
+	let selectMenuWidth = 2;
+	let searchBarWidth = 6;
+	let buttonWidth = 4;
 
-	const key = (tab: TabEntry) => tab.key;
+	const LOG_COLLECTION = 'log';
 
-	// TODO
-	// Popualate by loggers added
-	let tabs: TabEntry[] = [
-		{
-			key: 1,
-			label: 'Filer001'
-		},
-		{
-			key: 2,
-			label: 'Filer002'
-		},
-		{
-			key: 3,
-			label: 'Filer003'
-		},
-		{
-			key: 4,
-			label: 'Filer004'
-		},
-		{
-			key: 5,
-			label: 'Filer005'
+	const STR_SEP = "'";
+	const CONTAINS = '~';
+	const EQUALS = '=';
+	const AALO = '?=';
+	const AALOC = '?~';
+	const MESSAGE = 'full_log'; // Column name on server that holds full log
+	const CREATED = 'created';
+	const SERVER_NAME = 'server_name';
+	const OR = '||';
+	const AND = '&&';
+
+	let client: PocketBase;
+	let usr: User;
+	let lgrs: Logger[] = [];
+
+	let active: Logger;
+
+	pb.subscribe((value) => {
+		client = value;
+	});
+	user.subscribe((value) => {
+		usr = value;
+	});
+	loggers.subscribe((value) => {
+		lgrs = value;
+	});
+
+	function getUser() {
+		try {
+			let stringObject = localStorage.getItem('user');
+			if (stringObject) {
+				usr = JSON.parse(stringObject);
+			} else {
+				console.log('No user data found');
+			}
+		} catch (err) {
+			console.error(err);
 		}
-	];
-	let active = tabs[0];
+	}
 
-	let cells = ['Level', 'Date', 'Time', 'File', 'Line', 'Message', 'Server Name'];
+	function getClient() {
+		try {
+			let stringObject = localStorage.getItem('client');
+			if (stringObject) {
+				let urlData = <Client>JSON.parse(stringObject);
+				pb.setURL(urlData.URL);
+			} else {
+				console.log('No client data found');
+			}
+		} catch (err) {
+			console.error(err);
+		}
+	}
 
-	let items: Log[] = [];
-	let sort: keyof Log = 'date';
-	let sortDirection: Lowercase<keyof typeof SortValue> = 'ascending';
-    let rowsPerPage = 20;  // has to match option 1
+	function getLoggers() {
+		try {
+			let stringObject = localStorage.getItem('loggers');
+			if (stringObject) {
+				lgrs = <Logger[]>JSON.parse(stringObject);
+			}
+		} catch (err) {
+			console.error(err);
+		}
+	}
+
+	let directions = ['Ascending', 'Descending'];
+	let columns = ['level', 'date', 'time', 'file', 'line', 'message', 'server_name'];
+	let columnNames = ['Level', 'Date', 'Time', 'File', 'Line', 'Message', 'Server Name'];
+
+	// has to be implicit to accept Record[] type from pb
+	let logs = [];
+	let sortDirection = SortDirection.DESCENDING;
+	let sortColumn = 'date';
+	let searchTerm = '';
+	let specific: boolean = false;
+	let rowsPerPage = 30; // has to match option 1
 	let currentPage = 0;
 
 	$: start = currentPage * rowsPerPage;
-	$: end = Math.min(start + rowsPerPage, items.length);
-	$: slice = items.slice(start, end);
-	$: lastPage = Math.max(Math.ceil(items.length / rowsPerPage) - 1, 0);
+	$: end = Math.min(start + rowsPerPage, logs.length);
+	$: slice = logs.slice(start, end);
+	$: lastPage = Math.max(Math.ceil(logs.length / rowsPerPage) - 1, 0);
 
 	$: if (currentPage > lastPage) {
 		currentPage = lastPage;
 	}
 
-	function handleSort() {
-		items.sort((a, b) => {
-			const [aVal, bVal] = [a[sort], b[sort]][
-				sortDirection === 'ascending' ? 'slice' : 'reverse'
-			]();
-			if (typeof aVal === 'string' && typeof bVal === 'string') {
-				return aVal.localeCompare(bVal);
+	async function initLogList() {
+		let data;
+		if (active.name === 'All') {
+			data = await client.collection(LOG_COLLECTION).getList(currentPage, rowsPerPage, {
+				sort: sortDirection + CREATED
+			});
+		} else {
+			data = await client.collection(LOG_COLLECTION).getList(currentPage, rowsPerPage, {
+				sort: sortDirection + CREATED,
+				filter: SERVER_NAME + EQUALS + STR_SEP + active.name + STR_SEP
+			});
+		}
+		return data.items;
+	}
+
+	function setSortDirection(direction: string) {
+		if (direction.toLowerCase() == directions[0].toLowerCase()) {
+			sortDirection = SortDirection.ASCENDING;
+		} else {
+			sortDirection = SortDirection.DESCENDING;
+		}
+	}
+
+	async function handleSort() {
+		logs = [];
+		let data;
+		if (active.name == 'All') {
+			data = await client.collection(LOG_COLLECTION).getFullList(rowsPerPage, {
+				sort: sortDirection + CREATED + ',' + sortColumn
+			});
+		} else {
+			data = await client.collection(LOG_COLLECTION).getFullList(rowsPerPage, {
+				sort: sortDirection + CREATED + ',' + sortColumn,
+				filter: SERVER_NAME + EQUALS + STR_SEP + active.name + STR_SEP
+			});
+		}
+		logs = data;
+	}
+
+	async function handleSearch() {
+		logs = [];
+		let data;
+		if (!specific) {
+			if (active.name == 'All') {
+				data = await client.collection(LOG_COLLECTION).getFullList(rowsPerPage, {
+					sort: sortDirection + CREATED + ',' + sortColumn,
+					filter:
+						'(' +
+						MESSAGE +
+						CONTAINS +
+						STR_SEP +
+						searchTerm +
+						STR_SEP +
+						OR +
+						MESSAGE +
+						AALO +
+						STR_SEP +
+						searchTerm +
+						STR_SEP +
+						OR +
+						MESSAGE +
+						AALOC +
+						STR_SEP +
+						searchTerm +
+						STR_SEP +
+						')'
+				});
+			} else {
+				data = await client.collection(LOG_COLLECTION).getFullList(rowsPerPage, {
+					sort: sortDirection + CREATED + ',' + sortColumn,
+					filter:
+						'(' +
+						SERVER_NAME +
+						EQUALS +
+						STR_SEP +
+						active.name +
+						STR_SEP +
+						AND +
+						MESSAGE +
+						CONTAINS +
+						STR_SEP +
+						searchTerm +
+						STR_SEP +
+						OR +
+						SERVER_NAME +
+						EQUALS +
+						STR_SEP +
+						active.name +
+						STR_SEP +
+						AND +
+						MESSAGE +
+						AALO +
+						STR_SEP +
+						searchTerm +
+						STR_SEP +
+						OR +
+						SERVER_NAME +
+						EQUALS +
+						STR_SEP +
+						active.name +
+						STR_SEP +
+						AND +
+						MESSAGE +
+						AALOC +
+						STR_SEP +
+						searchTerm +
+						STR_SEP +
+						')'
+				});
 			}
-			return Number(aVal) - Number(bVal);
-		});
-		items = items;
+		} else {
+			if (active.name == 'All') {
+				data = await client.collection(LOG_COLLECTION).getFullList(rowsPerPage, {
+					sort: sortDirection + CREATED + ',' + sortColumn,
+					filter:
+						'(' +
+						MESSAGE +
+						CONTAINS +
+						STR_SEP +
+						searchTerm +
+						STR_SEP +
+						')'
+				});
+			} else {
+				data = await client.collection(LOG_COLLECTION).getFullList(rowsPerPage, {
+					sort: sortDirection + CREATED + ',' + sortColumn,
+					filter:
+						'(' +
+						SERVER_NAME +
+						EQUALS +
+						STR_SEP +
+						active.name +
+						STR_SEP +
+						AND +
+						MESSAGE +
+						CONTAINS +
+						STR_SEP +
+						searchTerm +
+						STR_SEP +
+						')'
+				});
+			}
+		}
+
+		logs = data;
 	}
 
-    async function initLogList(collection: string) {
-		var logs = await client.collection(collection).getList(1, 50, {
-			sort: '-created'
+	function refreshLogs() {
+		lgrs.forEach((logger) => {
+			fetch(logger.url);
 		});
-		return logs.items;
 	}
 
-    onMount(async () => {
-        if (loggedIn) {  // TODO Check store to see if account info is stored
-		    const adminAuthData = await client.admins.authWithPassword(user.email, user.password);
-            await initLogList(LOG_COLLECTION);
-        } else {
-            
-        }
-    })
+	onMount(async () => {
+		getClient();
+		getUser();
+		getLoggers();
+		active = lgrs[0];
 
-	// if (typeof fetch !== 'undefined') {
-	// 	// Slice a few off the end to show how the
-	// 	// last page looks when it's not full.
-	// 	fetch(
-	// 		'https://gist.githubusercontent.com/hperrin/e24a4ebd9afdf2a8c283338ae5160a62/raw/dcbf8e6382db49b0dcab70b22f56b1cc444f26d4/todos.json'
-	// 	)
-	// 		.then((response) => response.json())
-	// 		.then((json) => (items = json.slice(0, 197)));
-	// }
+		if (client.baseUrl) {
+			await client.admins.authWithPassword(usr.email, usr.password);
+			logs = await initLogList();
+		} else {
+			// TODO
+			// error/warning maybe snackbar?
+		}
+	});
 </script>
 
 <div>
-	<TabBar {tabs} let:tab {key} bind:active>
-		<Tab {tab} stacked={true} indicatorSpanOnlyContent={true} tabIndicator$transition="fade">
-			<Label>{tab.label}</Label>
-		</Tab>
-	</TabBar>
-	<DataTable
-		sortable
-		bind:sort
-		bind:sortDirection
-		on:SMUIDataTable:sorted={handleSort}
-		table$aria-label="Log list"
-		style="width: 100%;"
-	>
+	<Flex>
+		<TabBar tabs={lgrs} let:tab>
+			<Tab
+				{tab}
+				stacked={true}
+				indicatorSpanOnlyContent={true}
+				tabIndicator$transition="fade"
+				on:click={async () => {
+					active = tab;
+					logs = await initLogList();
+				}}
+			>
+				<Label>{tab.name}</Label>
+			</Tab>
+		</TabBar>
+		<div class="refresh-button">
+			<Button variant="raised" style="margin: 0em 1em;" on:click={() => refreshLogs()}>
+				<Label>Refresh</Label>
+			</Button>
+		</div>
+	</Flex>
+	<Flex>
+		<Paper color="primary" variant="outlined" style="max-width: 1100px; margin: 2em 0em;">
+			<Title>Sort Parameters</Title>
+			<LayoutGrid>
+				<Cell span={labelWidth} style="text-align: right;">
+					<p>Sort Direction:</p>
+				</Cell>
+				<Cell span={selectMenuWidth}>
+					<Select label="Select" style="width: 100%;" value={directions[1]}>
+						{#each directions as direction}
+							<Option value={direction} on:click={() => setSortDirection(direction)}
+								>{direction}</Option
+							>
+						{/each}
+					</Select>
+				</Cell>
+				<Cell span={labelWidth} style="text-align: right;">
+					<p>Sort Column:</p>
+				</Cell>
+				<Cell span={selectMenuWidth}>
+					<Select bind:value={sortColumn} label="Select" style="width: 100%;">
+						{#each columnNames as column, i}
+							<Option value={columns[i]}>{column}</Option>
+						{/each}
+					</Select>
+				</Cell>
+				<Cell span={buttonWidth}>
+					<Button
+						variant="raised"
+						style="margin: 0.8em 0em; width: 6em;"
+						on:click={() => handleSort()}
+					>
+						<Label>Sort</Label>
+					</Button>
+				</Cell>
+				<Cell span={labelWidth} style="text-align: right;">
+					<p>Search:</p>
+				</Cell>
+				<Cell span={searchBarWidth}>
+					<Textfield variant="outlined" bind:value={searchTerm} label="Search" style="width: 100%;">
+						<HelperText slot="helper" />
+					</Textfield>
+				</Cell>
+				<Cell span={1}>
+					<Button
+						variant="raised"
+						style="margin: 0.8em 0em; width: 6em;"
+						on:click={() => handleSearch()}
+					>
+						<Label>Search</Label>
+					</Button>
+				</Cell>
+				<Cell span={labelWidth} style="text-align: right; margin-top: 0.3em;">
+					<Wrapper>
+						<FormField align="end">
+							<p slot="label">Specific:</p>
+							<Switch bind:checked={specific} />
+						</FormField>
+						<Tooltip unbounded xPos="start">Beta feature. Can increase search accuracy when enabled.</Tooltip>
+					</Wrapper>
+				</Cell>
+			</LayoutGrid>
+		</Paper>
+	</Flex>
+
+	<DataTable table$aria-label="Log list" style="width: 98%; margin: auto 1%;">
 		<Head>
 			<Row>
-				{#each cells as cell, i}
-					{#if i == 0}
-						<Cell columnId={cell.toLowerCase()}>
-							<!-- For numeric columns, icon comes first. -->
-							<IconButton class="material-icons">arrow_upward</IconButton>
-							<Label>{cell}</Label>
-						</Cell>
-					{:else}
-						<Cell columnId={cell.toLowerCase()}>
-							<Label>{cell}</Label>
-							<IconButton class="material-icons">arrow_upward</IconButton>
-						</Cell>
-					{/if}
+				{#each columnNames as cell, i}
+					<TableCell columnId={cell.toLowerCase()}>
+						<Label>{cell}</Label>
+					</TableCell>
 				{/each}
 			</Row>
 		</Head>
-
 		<Body>
-			{#each slice as item, i}
+			{#each slice as log, i}
 				<Row>
-					<Cell>{item.level}</Cell>
-					<Cell>{item.date}</Cell>
-					<Cell>{item.time}</Cell>
-					<Cell>{item.file}</Cell>
-					<Cell>{item.line}</Cell>
-                    <Cell>{item.message}</Cell>
-                    <Cell>{item.server_name}</Cell>
+					<TableCell>{log.level}</TableCell>
+					<TableCell>{log.date}</TableCell>
+					<TableCell>{log.time}</TableCell>
+					<TableCell>{log.file}</TableCell>
+					<TableCell>{log.line}</TableCell>
+					<TableCell>{log.message}</TableCell>
+					<TableCell>{log.server_name}</TableCell>
 				</Row>
 			{/each}
 		</Body>
@@ -151,13 +400,13 @@
 			<svelte:fragment slot="rowsPerPage">
 				<Label>Rows Per Page</Label>
 				<Select variant="outlined" bind:value={rowsPerPage} noLabel>
-					<Option value={20}>20</Option>
+					<Option value={30}>30</Option>
 					<Option value={50}>50</Option>
 					<Option value={100}>100</Option>
 				</Select>
 			</svelte:fragment>
 			<svelte:fragment slot="total">
-				{start + 1}-{end} of {items.length}
+				{start + 1}-{end} of {logs.length}
 			</svelte:fragment>
 
 			<IconButton
@@ -190,6 +439,4 @@
 			>
 		</Pagination>
 	</DataTable>
-
-	<pre class="status">Selected: {active.key}</pre>
 </div>

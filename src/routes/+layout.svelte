@@ -15,7 +15,15 @@
 	</ul>
 </nav>
 
-<slot />
+<div class="content">
+	<slot />
+</div>
+
+<footer id="footer">
+	<div>
+		<p>Logging Dashboard and extlog are closed source tools written to interface with SeaweedFS. SeaweedFS has Filers which output logs to a single file; useful for small environments but hard to manage when scale is introduced. Logging Dashboard and extlog were developed to bring all the Filer's logs to one place where they can be examined and queried. Need help? <a href="mailto: jeremiahgavin12@gmail.com">email me</a></p>
+	</div>
+</footer>
 
 <style>
 	ul {
@@ -44,5 +52,21 @@
 	}
 	.nav-container {
 		margin-top: 1.3em;
+	}
+	#footer {
+		display: flex;
+		align-content: center;
+		position: absolute;
+		bottom: 0;
+		height: 160px;
+	}
+	footer div {
+		border: 1px solid rgb(92, 92, 92);
+		border-radius: 0.2rem;
+		padding: 1em;
+		margin: 0.5rem 1%;
+	}
+	.content {
+		padding-bottom: 160px;
 	}
 </style>

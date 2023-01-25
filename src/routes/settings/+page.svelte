@@ -7,57 +7,69 @@
 	import HelperText from '@smui/textfield/helper-text';
 	import Card, { Content } from '@smui/card';
 	import Button, { Label } from '@smui/button';
+	import IconButton, { Icon } from '@smui/icon-button';
 	import type { Logger } from '../../types/Logger';
+	import { loggers } from '../../stores/state';
+	import { onMount } from 'svelte';
 
 	let labelNameWidth = 1;
 	let labelURLWidth = 1;
 	let nameWidth = 4;
 	let urlWidth = 6;
 
-	let emptyLogger = {
-		name: '',
-		url: ''
-	};
-
 	let lgrs: Logger[] = [
 		{
-			name: '',
+			name: 'All',
 			url: ''
 		}
 	];
 
-	$: loggers = lgrs;
+	$: lgrs = lgrs;
 
 	function clearAll() {
-		loggers = [
+		lgrs = [
 			{
-				name: '',
+				name: 'All',
 				url: ''
 			}
 		];
 	}
 
 	function saveData() {
-		loggers.forEach((logger) => {
-			// Save to local and store
-		});
+		localStorage.setItem('loggers', JSON.stringify(lgrs));
+		loggers.set(lgrs);
 	}
 
 	function removeThis(index: number) {
-		if (index < 1 && loggers.length === 1) {
+		if (index < 1 && lgrs.length === 1) {
 			return;
 		}
-		loggers.splice(index, 1);
-		loggers = loggers;
+		lgrs.splice(index, 1);
+		lgrs = lgrs;
 	}
 
 	function addNewLogger() {
-		loggers.push({
+		lgrs.push({
 			name: '',
 			url: ''
 		});
-		loggers = loggers;
+		lgrs = lgrs;
 	}
+
+	function getLoggers() {
+		try {
+			let stringObject = localStorage.getItem('loggers');
+			if (stringObject) {
+				lgrs = <Logger[]>JSON.parse(stringObject);
+			}
+		} catch (err) {
+			console.error(err);
+		}
+	}
+
+	onMount(() => {
+		getLoggers();
+	});
 </script>
 
 <div>
@@ -70,9 +82,19 @@
 		</Card>
 	</Flex>
 	<Flex direction="column">
-		{#each loggers as logger, i}
-			<Paper style="max-width: 70%; margin-bottom: 1em;">
+		{#each lgrs as logger, i}
+			<Paper color="primary" variant="outlined" style="max-width: 70%; margin-bottom: 1em;">
 				<LayoutGrid style="padding: 0 0.5em">
+					<Cell span={12}>
+						<Flex justify="end">
+							<IconButton
+								style="color: #fff"
+								on:click={() => removeThis(i)}
+							>
+								<Icon class="material-icons">close</Icon>
+							</IconButton>
+						</Flex>
+					</Cell>
 					<Cell span={labelNameWidth} style="text-align: right;">
 						<p>Name:</p>
 					</Cell>
@@ -93,17 +115,6 @@
 						<Textfield variant="outlined" bind:value={logger.url} label="url" style="width: 100%;">
 							<HelperText slot="helper">http://localhost:9000/get_logs</HelperText>
 						</Textfield>
-					</Cell>
-					<Cell span={12}>
-						<Flex>
-							<Button
-								on:click={() => removeThis(i)}
-								variant="unelevated"
-								style="width: 120px; background-color: rgba(163, 59, 59, 0.844);"
-							>
-								<Label>Delete</Label>
-							</Button>
-						</Flex>
 					</Cell>
 				</LayoutGrid>
 			</Paper>
