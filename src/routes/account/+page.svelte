@@ -11,9 +11,14 @@
 	import { onMount } from 'svelte';
 	import type { Client } from '../../types/Client';
 	import type { User } from '../../types/User';
+	import Snackbar, { Actions } from '@smui/snackbar';
+	import IconButton from '@smui/icon-button';
 
 	let labelWidth = 4;
 	let textboxWidth = 8;
+
+	let snackbarError: Snackbar;
+	let errorMsg = 'Sorry, that didn\'t work, please try again!';
 
 	let usr: User = {
 		email: '',
@@ -69,8 +74,9 @@
 			setUser();
 			setClientURL();
 		} else {
-			// TODO
 			// display error
+			errorMsg = 'Cannot save. Fill each form please.';
+			snackbarError.forceOpen();
 		}
 	}
 
@@ -128,4 +134,12 @@
 			</Flex>
 		</Paper>
 	</Flex>
+	<Snackbar bind:this={snackbarError} class="snackbar-error">
+		<Label
+		  >{errorMsg}</Label
+		>
+		<Actions>
+		  <IconButton class="material-icons" title="Dismiss">close</IconButton>
+		</Actions>
+	</Snackbar>
 </div>

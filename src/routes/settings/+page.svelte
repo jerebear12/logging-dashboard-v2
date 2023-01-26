@@ -69,6 +69,7 @@
 
 	onMount(() => {
 		getLoggers();
+		saveData();
 	});
 </script>
 

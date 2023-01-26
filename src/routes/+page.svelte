@@ -21,11 +21,15 @@
 	import Switch from '@smui/switch';
 	import FormField from '@smui/form-field';
 	import Tooltip, { Wrapper } from '@smui/tooltip';
+	import Snackbar, { Actions } from '@smui/snackbar';
 
 	let labelWidth = 2;
 	let selectMenuWidth = 2;
 	let searchBarWidth = 6;
 	let buttonWidth = 4;
+
+	let snackbarError: Snackbar;
+	let errorMsg = 'Sorry, that didn\'t work, please try again!';
 
 	const LOG_COLLECTION = 'log';
 
@@ -56,31 +60,37 @@
 		lgrs = value;
 	});
 
-	function getUser() {
+	function getUser() : boolean {
+		let success = false;
 		try {
 			let stringObject = localStorage.getItem('user');
 			if (stringObject) {
 				usr = JSON.parse(stringObject);
+				success = true;
 			} else {
 				console.log('No user data found');
 			}
 		} catch (err) {
 			console.error(err);
 		}
+		return success;
 	}
 
-	function getClient() {
+	function getClient() : boolean {
+		let success = false;
 		try {
 			let stringObject = localStorage.getItem('client');
 			if (stringObject) {
 				let urlData = <Client>JSON.parse(stringObject);
 				pb.setURL(urlData.URL);
+				success = true;
 			} else {
 				console.log('No client data found');
 			}
 		} catch (err) {
 			console.error(err);
 		}
+		return success;
 	}
 
 	function getLoggers() {
@@ -259,7 +269,11 @@
 				});
 			}
 		}
-
+		if (data.length < 1) {
+			console.log("No data from search")
+			errorMsg = "No data from search, try another search term."
+			snackbarError.forceOpen()
+		}
 		logs = data;
 	}
 
@@ -270,17 +284,20 @@
 	}
 
 	onMount(async () => {
-		getClient();
-		getUser();
+		if (!getClient() || !getUser()) {
+			errorMsg = "No account information. Please go to the Account or About page.";
+			snackbarError.forceOpen();
+			return;
+		}
 		getLoggers();
 		active = lgrs[0];
 
-		if (client.baseUrl) {
+		if (client.baseUrl !== null && client.baseUrl !== undefined && client.baseUrl !== "") {
 			await client.admins.authWithPassword(usr.email, usr.password);
 			logs = await initLogList();
 		} else {
-			// TODO
-			// error/warning maybe snackbar?
+			errorMsg = "No PocketBase URL found, please check your account settings.";
+			snackbarError.forceOpen();
 		}
 	});
 </script>
@@ -439,4 +456,12 @@
 			>
 		</Pagination>
 	</DataTable>
+	<Snackbar bind:this={snackbarError} class="snackbar-error">
+		<Label
+		  >{errorMsg}</Label
+		>
+		<Actions>
+		  <IconButton class="material-icons" title="Dismiss">close</IconButton>
+		</Actions>
+	</Snackbar>
 </div>
