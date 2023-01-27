@@ -49,7 +49,7 @@ export const pb = createClient();
 function createLoggersList() {
 	const { subscribe, set, update } = writable<Logger[]>([
 		{
-			name: '',
+			name: 'All',
 			url: ''
 		}
 	]);

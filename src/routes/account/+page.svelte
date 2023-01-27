@@ -20,6 +20,9 @@
 	let snackbarError: Snackbar;
 	let errorMsg = 'Sorry, that didn\'t work, please try again!';
 
+	let snackbarSuccess: Snackbar;
+	let successMsg = 'Awesome! That worked.';
+
 	let usr: User = {
 		email: '',
 		password: ''
@@ -73,6 +76,9 @@
 
 			setUser();
 			setClientURL();
+
+			successMsg = "Account Data successfully saved!";
+			snackbarSuccess.forceOpen();
 		} else {
 			// display error
 			errorMsg = 'Cannot save. Fill each form please.';
@@ -137,6 +143,14 @@
 	<Snackbar bind:this={snackbarError} class="snackbar-error">
 		<Label
 		  >{errorMsg}</Label
+		>
+		<Actions>
+		  <IconButton class="material-icons" title="Dismiss">close</IconButton>
+		</Actions>
+	</Snackbar>
+	<Snackbar bind:this={snackbarSuccess} class="snackbar-success">
+		<Label
+		  >{successMsg}</Label
 		>
 		<Actions>
 		  <IconButton class="material-icons" title="Dismiss">close</IconButton>

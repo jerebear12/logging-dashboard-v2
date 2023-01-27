@@ -11,11 +11,15 @@
 	import type { Logger } from '../../types/Logger';
 	import { loggers } from '../../stores/state';
 	import { onMount } from 'svelte';
+	import Snackbar, { Actions } from '@smui/snackbar';
 
 	let labelNameWidth = 1;
 	let labelURLWidth = 1;
 	let nameWidth = 4;
 	let urlWidth = 6;
+
+	let snackbarSuccess: Snackbar;
+	let successMsg = 'Awesome! That worked.';
 
 	let lgrs: Logger[] = [
 		{
@@ -38,6 +42,9 @@
 	function saveData() {
 		localStorage.setItem('loggers', JSON.stringify(lgrs));
 		loggers.set(lgrs);
+
+		successMsg = "loggers saved! Sort by logger on the homepage!"
+		snackbarSuccess.forceOpen();
 	}
 
 	function removeThis(index: number) {
@@ -69,7 +76,7 @@
 
 	onMount(() => {
 		getLoggers();
-		saveData();
+		//saveData();
 	});
 </script>
 
@@ -138,6 +145,14 @@
 			</Flex>
 		</div>
 	</Flex>
+	<Snackbar bind:this={snackbarSuccess} class="snackbar-success">
+		<Label
+		  >{successMsg}</Label
+		>
+		<Actions>
+		  <IconButton class="material-icons" title="Dismiss">close</IconButton>
+		</Actions>
+	</Snackbar>
 </div>
 
 <style>

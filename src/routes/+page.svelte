@@ -22,6 +22,7 @@
 	import FormField from '@smui/form-field';
 	import Tooltip, { Wrapper } from '@smui/tooltip';
 	import Snackbar, { Actions } from '@smui/snackbar';
+	import { ClientResponseError } from 'pocketbase';
 
 	let labelWidth = 2;
 	let selectMenuWidth = 2;
@@ -30,6 +31,12 @@
 
 	let snackbarError: Snackbar;
 	let errorMsg = 'Sorry, that didn\'t work, please try again!';
+
+	let snackbarSuccess: Snackbar;
+	let successMsg = 'Awesome! That worked.';
+
+	let snackbarInfo: Snackbar;
+	let infoMsg = 'Cool, now try to search something new.';
 
 	const LOG_COLLECTION = 'log';
 
@@ -138,6 +145,10 @@
 				filter: SERVER_NAME + EQUALS + STR_SEP + active.name + STR_SEP
 			});
 		}
+		if (data.items.length < 1) {
+			errorMsg = "Something went wrong... Check your account and settings please."
+			snackbarError.forceOpen();
+		}
 		return data.items;
 	}
 
@@ -166,7 +177,9 @@
 	}
 
 	async function handleSearch() {
-		logs = [];
+		infoMsg = "Searching..."
+		snackbarInfo.forceOpen()
+		logs = [];  // clear the page so the user can tell new logs are on the way
 		let data;
 		if (!specific) {
 			if (active.name == 'All') {
@@ -270,7 +283,7 @@
 			}
 		}
 		if (data.length < 1) {
-			console.log("No data from search")
+			snackbarInfo.close()
 			errorMsg = "No data from search, try another search term."
 			snackbarError.forceOpen()
 		}
@@ -278,8 +291,38 @@
 	}
 
 	function refreshLogs() {
-		lgrs.forEach((logger) => {
-			fetch(logger.url);
+		infoMsg = "Parsing Logs... Please be patient!"
+		snackbarInfo.forceOpen()
+
+		let response: Response;
+		lgrs.forEach(async (logger) => {
+			if (logger.url === "" || logger.url === undefined || logger.url === null) { return; }
+			try {
+				response = await fetch(logger.url);
+			} catch (err) {
+				errorMsg = "Error: " + err.toString() + ". Is your logger running on HTTP or HTTPS?";
+				snackbarInfo.close();
+				snackbarError.forceOpen();
+				return;
+			}
+			switch (response.status) {
+				case 0:
+					errorMsg = logger.name + "'s Auth request failed. Status code: " + response.status;
+					break;
+				case 400:
+					errorMsg = logger.name + "'s Auth request failed. Status code: " + response.status;
+					break;
+				case 404:
+					errorMsg = logger.name + "'s request failed. It looks like the URI specified in Settings is incorrect.";
+					break;
+			}
+			snackbarInfo.close();
+			if (!response.ok) {
+				snackbarError.forceOpen();
+			} else {
+				successMsg = logger.name + "'s logs have been parsed.";
+				snackbarSuccess.forceOpen();
+			}
 		});
 	}
 
@@ -293,8 +336,27 @@
 		active = lgrs[0];
 
 		if (client.baseUrl !== null && client.baseUrl !== undefined && client.baseUrl !== "") {
-			await client.admins.authWithPassword(usr.email, usr.password);
-			logs = await initLogList();
+			try {
+				await client.admins.authWithPassword(usr.email, usr.password);
+				logs = await initLogList();
+			} catch (err) {
+				if (err instanceof ClientResponseError) {
+					switch (err.status) {
+						case 0:
+							errorMsg = "Request failed. It looks like the URI specified in Account is incorrect.";
+							snackbarError.forceOpen();
+							console.log(err);
+							break;
+						case 400:
+							errorMsg = "Auth request failed. Email or Password do not match stored data.";
+							snackbarError.forceOpen();
+							console.error(err);
+							break;
+					}
+				} else {
+					console.error(err);
+				}
+			}
 		} else {
 			errorMsg = "No PocketBase URL found, please check your account settings.";
 			snackbarError.forceOpen();
@@ -459,6 +521,22 @@
 	<Snackbar bind:this={snackbarError} class="snackbar-error">
 		<Label
 		  >{errorMsg}</Label
+		>
+		<Actions>
+		  <IconButton class="material-icons" title="Dismiss">close</IconButton>
+		</Actions>
+	</Snackbar>
+	<Snackbar bind:this={snackbarSuccess} class="snackbar-success">
+		<Label
+		  >{successMsg}</Label
+		>
+		<Actions>
+		  <IconButton class="material-icons" title="Dismiss">close</IconButton>
+		</Actions>
+	</Snackbar>
+	<Snackbar bind:this={snackbarInfo} class="snackbar-info">
+		<Label
+		  >{infoMsg}</Label
 		>
 		<Actions>
 		  <IconButton class="material-icons" title="Dismiss">close</IconButton>
