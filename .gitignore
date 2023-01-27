@@ -9,3 +9,6 @@ node_modules
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 package-lock.json
+package-lock.json
+static/smui-dark.css
+static/smui.css
